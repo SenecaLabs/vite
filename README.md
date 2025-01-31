@@ -1,3 +1,12 @@
+# Fork of Vite with [these importmap changes](https://github.com/vitejs/vite/pull/16552) included
+
+Manual release process:
+
+1. Log in to NPM as Jenkins (verify with `npm whoami`)
+1. Bump version in `packages/vite/package.json`
+1. `cd packages/vite`
+1. `pnpm publish`
+
 <p align="center">
   <a href="https://vite.dev" target="_blank" rel="noopener noreferrer">
     <img width="180" src="https://vite.dev/logo.svg" alt="Vite logo">
