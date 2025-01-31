@@ -392,6 +392,7 @@ export const buildEnvironmentOptionsDefaults = Object.freeze({
   reportCompressedSize: true,
   chunkSizeWarningLimit: 500,
   watch: null,
+  chunkImportMap: false,
   // createEnvironment
 })
 
@@ -458,7 +459,6 @@ export function resolveBuildEnvironmentOptions(
               ...defaultModulePreload,
               ...merged.modulePreload,
             },
-    chunkImportMap: false,
   }
 
   return resolved
