@@ -1,9 +1,4 @@
 import path from 'node:path'
-import escapeHtml from 'escape-html'
-import MagicString from 'magic-string'
-import colors from 'picocolors'
-import { stripLiteral } from 'strip-literal'
-
 import type {
   OutputAsset,
   OutputBundle,
@@ -11,13 +6,13 @@ import type {
   RollupError,
   SourceMapInput,
 } from 'rollup'
+import MagicString from 'magic-string'
+import colors from 'picocolors'
 import type { DefaultTreeAdapterMap, ParserError, Token } from 'parse5'
-import { cleanUrl } from '../../shared/utils'
-import { getNodeAssetAttributes } from '../assetSource'
-import { toOutputFilePathInHtml } from '../build'
-import { resolveEnvPrefix } from '../env'
-import { perEnvironmentState } from '../environment'
-import { checkPublicFile } from '../publicDir'
+import { stripLiteral } from 'strip-literal'
+import escapeHtml from 'escape-html'
+import type { Plugin } from '../plugin'
+import type { ViteDevServer } from '../server'
 import {
   encodeURIPath,
   generateCodeFrame,
@@ -31,19 +26,23 @@ import {
   unique,
   urlCanParse,
 } from '../utils'
-import type { Plugin } from '../plugin'
-import type { ViteDevServer } from '../server'
 import type { ResolvedConfig } from '../config'
+import { checkPublicFile } from '../publicDir'
+import { toOutputFilePathInHtml } from '../build'
+import { resolveEnvPrefix } from '../env'
 import type { Logger } from '../logger'
+import { cleanUrl } from '../../shared/utils'
+import { perEnvironmentState } from '../environment'
+import { getNodeAssetAttributes } from '../assetSource'
 import {
   assetUrlRE,
   getPublicAssetFilename,
   publicAssetUrlRE,
   urlToBuiltUrl,
 } from './asset'
-import { postChunkImportMapHook } from './chunkImportMap'
 import { cssBundleNameCache, isCSSRequest } from './css'
 import { modulePreloadPolyfillId } from './modulePreloadPolyfill'
+import { postChunkImportMapHook } from './chunkImportMap'
 
 interface ScriptAssetsUrl {
   start: number
