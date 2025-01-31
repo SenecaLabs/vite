@@ -1,4 +1,9 @@
 import path from 'node:path'
+import escapeHtml from 'escape-html'
+import MagicString from 'magic-string'
+import colors from 'picocolors'
+import { stripLiteral } from 'strip-literal'
+
 import type {
   OutputAsset,
   OutputBundle,
@@ -6,13 +11,13 @@ import type {
   RollupError,
   SourceMapInput,
 } from 'rollup'
-import MagicString from 'magic-string'
-import colors from 'picocolors'
 import type { DefaultTreeAdapterMap, ParserError, Token } from 'parse5'
-import { stripLiteral } from 'strip-literal'
-import escapeHtml from 'escape-html'
-import type { Plugin } from '../plugin'
-import type { ViteDevServer } from '../server'
+import { cleanUrl } from '../../shared/utils'
+import { getNodeAssetAttributes } from '../assetSource'
+import { toOutputFilePathInHtml } from '../build'
+import { resolveEnvPrefix } from '../env'
+import { perEnvironmentState } from '../environment'
+import { checkPublicFile } from '../publicDir'
 import {
   encodeURIPath,
   generateCodeFrame,
@@ -26,20 +31,17 @@ import {
   unique,
   urlCanParse,
 } from '../utils'
+import type { Plugin } from '../plugin'
+import type { ViteDevServer } from '../server'
 import type { ResolvedConfig } from '../config'
-import { checkPublicFile } from '../publicDir'
-import { toOutputFilePathInHtml } from '../build'
-import { resolveEnvPrefix } from '../env'
 import type { Logger } from '../logger'
-import { cleanUrl } from '../../shared/utils'
-import { perEnvironmentState } from '../environment'
-import { getNodeAssetAttributes } from '../assetSource'
 import {
   assetUrlRE,
   getPublicAssetFilename,
   publicAssetUrlRE,
   urlToBuiltUrl,
 } from './asset'
+import { postChunkImportMapHook } from './chunkImportMap'
 import { cssBundleNameCache, isCSSRequest } from './css'
 import { modulePreloadPolyfillId } from './modulePreloadPolyfill'
 
@@ -61,7 +63,7 @@ const htmlLangRE = /\.(?:html|htm)$/
 const spaceRe = /[\t\n\f\r ]/
 
 const importMapRE =
-  /[ \t]*<script[^>]*type\s*=\s*(?:"importmap"|'importmap'|importmap)[^>]*>.*?<\/script>/is
+  /[ \t]*<script[^>]*type\s*=\s*(?:"importmap"|'importmap'|importmap)[^>]*>(.*?)<\/script>/gis
 const moduleScriptRE =
   /[ \t]*<script[^>]*type\s*=\s*(?:"module"|'module'|module)[^>]*>/i
 const modulePreloadLinkRE =
@@ -332,8 +334,9 @@ export function buildHtmlPlugin(config: ResolvedConfig): Plugin {
   preHooks.unshift(injectCspNonceMetaTagHook(config))
   preHooks.unshift(preImportMapHook(config))
   preHooks.push(htmlEnvHook(config))
-  postHooks.push(injectNonceAttributeTagHook(config))
+  postHooks.push(postChunkImportMapHook(config))
   postHooks.push(postImportMapHook())
+  postHooks.push(injectNonceAttributeTagHook(config))
   const processedHtml = perEnvironmentState(() => new Map<string, string>())
 
   const isExcludedUrl = (url: string) =>
@@ -1120,22 +1123,27 @@ export function preImportMapHook(
 
 /**
  * Move importmap before the first module script and modulepreload link
+ * Merge all importmaps
  */
 export function postImportMapHook(): IndexHtmlTransformHook {
   return (html) => {
     if (!importMapAppendRE.test(html)) return
 
-    let importMap: string | undefined
-    html = html.replace(importMapRE, (match) => {
-      importMap = match
+    let imports = {}
+
+    html = html.replaceAll(importMapRE, (_, p1) => {
+      imports = { ...imports, ...JSON.parse(p1).imports }
       return ''
     })
 
-    if (importMap) {
-      html = html.replace(
-        importMapAppendRE,
-        (match) => `${importMap}\n${match}`,
-      )
+    if (Object.keys(imports).length > 0) {
+      html = html.replace(importMapAppendRE, (match) => {
+        return `${serializeTag({
+          tag: 'script',
+          attrs: { type: 'importmap' },
+          children: JSON.stringify({ imports }),
+        })}\n${match}`
+      })
     }
 
     return html

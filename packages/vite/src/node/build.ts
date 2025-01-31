@@ -1,6 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import commonjsPlugin from '@rollup/plugin-commonjs'
 import colors from 'picocolors'
+
 import type {
   ExternalOption,
   InputOption,
@@ -18,28 +20,37 @@ import type {
   WarningHandlerWithDefault,
   WatcherOptions,
 } from 'rollup'
-import commonjsPlugin from '@rollup/plugin-commonjs'
 import type { RollupCommonJSOptions } from 'dep-types/commonjs'
 import type { RollupDynamicImportVarsOptions } from 'dep-types/dynamicImportVars'
 import type { TransformOptions } from 'esbuild'
 import { withTrailingSlash } from '../shared/utils'
+import {
+  BaseEnvironment,
+  getDefaultResolvedEnvironmentOptions,
+} from './baseEnvironment'
+import { resolveConfig } from './config'
 import {
   DEFAULT_ASSETS_INLINE_LIMIT,
   ESBUILD_MODULES_TARGET,
   ROLLUP_HOOKS,
   VERSION,
 } from './constants'
-import type {
-  EnvironmentOptions,
-  InlineConfig,
-  ResolvedConfig,
-  ResolvedEnvironmentOptions,
-} from './config'
-import { resolveConfig } from './config'
-import type { PartialEnvironment } from './baseEnvironment'
-import { buildReporterPlugin } from './plugins/reporter'
+import { findNearestPackageData } from './packages'
+import { perEnvironmentPlugin, resolveEnvironmentPlugins } from './plugin'
+import { getHookHandler } from './plugins'
+import { chunkImportMapPlugin } from './plugins/chunkImportMap'
+import { completeSystemWrapPlugin } from './plugins/completeSystemWrap'
+import { dataURIPlugin } from './plugins/dataUri'
 import { buildEsbuildPlugin } from './plugins/esbuild'
-import { type TerserOptions, terserPlugin } from './plugins/terser'
+import { buildImportAnalysisPlugin } from './plugins/importAnalysisBuild'
+import { buildLoadFallbackPlugin } from './plugins/loadFallback'
+import { manifestPlugin } from './plugins/manifest'
+import { buildReporterPlugin } from './plugins/reporter'
+import type { TerserOptions} from './plugins/terser';
+import { terserPlugin } from './plugins/terser'
+import { webWorkerPostPlugin } from './plugins/worker'
+import { mergeConfig } from './publicUtils'
+import { ssrManifestPlugin } from './ssr/ssrManifestPlugin'
 import {
   arraify,
   asyncFlatten,
@@ -53,28 +64,21 @@ import {
   normalizePath,
   partialEncodeURIPath,
 } from './utils'
-import { perEnvironmentPlugin, resolveEnvironmentPlugins } from './plugin'
-import { manifestPlugin } from './plugins/manifest'
-import type { Logger } from './logger'
-import { dataURIPlugin } from './plugins/dataUri'
-import { buildImportAnalysisPlugin } from './plugins/importAnalysisBuild'
-import { ssrManifestPlugin } from './ssr/ssrManifestPlugin'
-import { buildLoadFallbackPlugin } from './plugins/loadFallback'
-import { findNearestPackageData } from './packages'
-import type { PackageCache } from './packages'
 import {
   getResolvedOutDirs,
   resolveChokidarOptions,
   resolveEmptyOutDir,
 } from './watch'
-import { completeSystemWrapPlugin } from './plugins/completeSystemWrap'
-import { mergeConfig } from './publicUtils'
-import { webWorkerPostPlugin } from './plugins/worker'
-import { getHookHandler } from './plugins'
-import {
-  BaseEnvironment,
-  getDefaultResolvedEnvironmentOptions,
-} from './baseEnvironment'
+
+import type {
+  EnvironmentOptions,
+  InlineConfig,
+  ResolvedConfig,
+  ResolvedEnvironmentOptions,
+} from './config'
+import type { PartialEnvironment } from './baseEnvironment'
+import type { Logger } from './logger'
+import type { PackageCache } from './packages'
 import type { MinimalPluginContext, Plugin, PluginContext } from './plugin'
 import type { RollupPluginHooks } from './typeUtils'
 
@@ -272,6 +276,12 @@ export interface BuildEnvironmentOptions {
    */
   watch?: WatcherOptions | null
   /**
+   * Whether to inject importmap for generated chunks.
+   * This importmap is used to optimize caching efficiency.
+   * @default false
+   */
+  chunkImportMap?: boolean
+  /**
    * create the Build Environment instance
    */
   createEnvironment?: (
@@ -451,6 +461,7 @@ export function resolveBuildEnvironmentOptions(
               ...defaultModulePreload,
               ...merged.modulePreload,
             },
+    chunkImportMap: false,
   }
 
   return resolved
@@ -481,6 +492,9 @@ export async function resolveBuildPlugins(config: ResolvedConfig): Promise<{
           ).filter(Boolean) as Plugin[],
       ),
       ...(config.isWorker ? [webWorkerPostPlugin()] : []),
+      ...(!config.isWorker && config.build.chunkImportMap
+        ? [chunkImportMapPlugin()]
+        : []),
     ],
     post: [
       buildImportAnalysisPlugin(config),

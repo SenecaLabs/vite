@@ -1,8 +1,9 @@
+import { execFile } from 'node:child_process'
 import { URL, fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
-import { execFile } from 'node:child_process'
-import { describe, expect, test } from 'vitest'
 import { mapFileCommentRegex } from 'convert-source-map'
+import { describe, expect, test } from 'vitest'
+
 import { commentSourceMap } from '../foo-with-sourcemap-plugin'
 import {
   extractSourcemap,
