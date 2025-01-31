@@ -77,6 +77,7 @@ import {
 } from './baseEnvironment'
 import type { MinimalPluginContext, Plugin, PluginContext } from './plugin'
 import type { RollupPluginHooks } from './typeUtils'
+import { chunkImportMapPlugin } from './plugins/chunkImportMap'
 
 export interface BuildEnvironmentOptions {
   /**
@@ -272,6 +273,12 @@ export interface BuildEnvironmentOptions {
    */
   watch?: WatcherOptions | null
   /**
+   * Whether to inject importmap for generated chunks.
+   * This importmap is used to optimize caching efficiency.
+   * @default false
+   */
+  chunkImportMap?: boolean
+  /**
    * create the Build Environment instance
    */
   createEnvironment?: (
@@ -385,6 +392,7 @@ export const buildEnvironmentOptionsDefaults = Object.freeze({
   reportCompressedSize: true,
   chunkSizeWarningLimit: 500,
   watch: null,
+  chunkImportMap: false,
   // createEnvironment
 })
 
@@ -481,6 +489,9 @@ export async function resolveBuildPlugins(config: ResolvedConfig): Promise<{
           ).filter(Boolean) as Plugin[],
       ),
       ...(config.isWorker ? [webWorkerPostPlugin()] : []),
+      ...(!config.isWorker && config.build.chunkImportMap
+        ? [chunkImportMapPlugin()]
+        : []),
     ],
     post: [
       buildImportAnalysisPlugin(config),
