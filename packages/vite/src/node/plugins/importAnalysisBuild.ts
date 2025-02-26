@@ -100,6 +100,11 @@ function preload(
       deps.map((dep) => {
         // @ts-expect-error assetsURL is declared before preload.toString()
         dep = assetsURL(dep, importerUrl)
+        if (!('resolve' in import.meta)) {
+          import.meta.resolve = function (specifier) {
+            return new URL(specifier, import.meta.url).href
+          }
+        }
         dep = import.meta.resolve(dep)
         if (dep in seen) return
         seen[dep] = true
